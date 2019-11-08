@@ -22,7 +22,7 @@ type (
 
 type BidResponse struct {
 	Price    float32 `json:"price"`
-	BidderId int `json:"bidder_id"`
+	BidderId int     `json:"bidder_id"`
 }
 
 type RequestHandlerFunction func(w http.ResponseWriter, r *http.Request)

@@ -8,24 +8,28 @@ import (
 	commonUtils "auction-system/commonUtils"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 )
 
-var allAuctions auctionModels.AppState
+var (
+	allAuctions auctionModels.AppState
+	allottedIds map[int]struct{}
+)
 
 func init() {
 	allAuctions = auctionModels.AppState{} // Initialize Global App State only once
-}
-
-func BidEndpointHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Welcome to bid endpoint")
+	allottedIds = map[int]struct{}{}
 }
 
 // RegisterAuctionHandler : Get's optional Auction Name and creates an auction and updates Global App State for auctions list.
 func RegisterAuctionHandler(w http.ResponseWriter, r *http.Request) {
+	check := commonUtils.VerifyHTTPMethod(w, r, "POST")
+	if check == false {
+		w = commonUtils.SendMethodNotAllowed(w)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	var auction auctionModels.AuctionStruct
 	err := decoder.Decode(&auction)
@@ -33,92 +37,89 @@ func RegisterAuctionHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		commonUtils.SendJSONResponse(w, map[string]string{"success": "false", "error": "true", "message": "Unable to decode Request body."})
 	}
+
+	// Check against allotted id's if any repeat ID is given.
+	// Random Id creation would run 100 times, and if still no unique Id, then drop the creation
+	i := 0
+	for i <= 100 {
+		newId := commonUtils.GetRandomInt()
+		if _, found := allottedIds[newId]; !found {
+			auction.Id = newId
+			break;
+		} else {
+			commonUtils.SendJSONResponse(w, map[string]string{"success": "false", "error": "true", "message": "Could not generate unique Auction"})
+			return
+		}
+
+	}
 	// Start lock for allAuctions i.e. AppState
 	allAuctions.Lock()
 	defer allAuctions.Unlock()
 
-	auction.Id = commonUtils.GetRandomInt()
 
 	allAuctions.AuctionList = append(allAuctions.AuctionList, auction)
-	log.Printf("%+v", allAuctions)
 	commonUtils.SendJSONResponse(w, map[string]string{"success": "true", "auction_id": strconv.Itoa(auction.Id)})
 }
 
 func ListEndpointHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%+v", allAuctions)
+	check := commonUtils.VerifyHTTPMethod(w, r, "GET")
+	if check == false {
+		w = commonUtils.SendMethodNotAllowed(w)
+		return
+	}
 	commonUtils.SendJSONResponse(w, allAuctions)
 }
 
 // BidRoundHandler : Checks Auctions List and starts 1st Entry of the list.
 func BidRoundHandler(w http.ResponseWriter, r *http.Request) {
+	check := commonUtils.VerifyHTTPMethod(w, r, "GET")
+	if check == false {
+		w = commonUtils.SendMethodNotAllowed(w)
+		return
+	}
 	listLen := len(allAuctions.AuctionList)
 	var resp interface{}
 	// Start an auction Round if list of auctions has entry
 	if listLen <= 0 {
-		resp = map[string]string{"success": "false", "message": "No Auctions Listed. Register an auction first before starting bid round."}
+		resp = map[string]string{"auction_id": "0", "price": "null", "bidder_id": "null"}
 		commonUtils.SendJSONResponse(w, resp)
 		return
 	}
 	allAuctions.AuctionList, allAuctions.LiveAuction = utils.Remove(allAuctions.AuctionList, 0)
-	resp = map[string]string{"success": "true", "auction_name": allAuctions.LiveAuction.Name, "auction_id": strconv.Itoa(allAuctions.LiveAuction.Id)}
-	// TODO: Notify all bidders about Auction
-	// Create a channel to collect bid notification responses. Default timeout - 200ms
-	bidEntriesChannel := make(chan bidderModels.BidResponse, 10)
-	biddersObj := bidderHandlers.GetBiddersList()
-	var bidEntries []bidderModels.BidResponse
+
+	// Create a channel to collect bid notification responses.
+	bidEntriesChannel, biddersObj := make(chan bidderModels.BidResponse, 10), bidderHandlers.GetBiddersList()
 	select {
 	case bid := <-bidEntriesChannel:
-		bidEntries = append(bidEntries, bid)
 		fmt.Println("received bid", bid)
 
 	default:
 		fmt.Println("no bids received")
 	}
 
-	go sendAuctionNotification(biddersObj, bidEntriesChannel)
-	timer := time.NewTimer(2000 * time.Millisecond)
-	<-timer.C
-	close(bidEntriesChannel)
-	fmt.Println("Timer finished")
+	// SendAuctionNotification: Takes bidders object and concurrently Notifies all bidders.
+	go SendAuctionNotification(biddersObj, bidEntriesChannel)
 
-	highestBidder :=  bidderModels.BidResponse{}
+	// Set 200 millisecond timer.
+	timer := time.NewTimer(200 * time.Millisecond)
+	<-timer.C
+	// Close channel as timer is up.
+	close(bidEntriesChannel)
+
+	resp = map[string]string{"auction_id": strconv.Itoa(allAuctions.LiveAuction.Id), "price": "null", "bidder_id": "null"}
+	highestBidder := bidderModels.BidResponse{}
+	// If no bids received return
+	if len(bidEntriesChannel) <= 0 {
+		commonUtils.SendJSONResponse(w, resp)
+	}
 	for i := range bidEntriesChannel {
 		if i.Price > highestBidder.Price {
 			highestBidder.BidderId = i.BidderId
 			highestBidder.Price = i.Price
 		}
 	}
-	fmt.Println("Highest bidder")
-	fmt.Printf("%+v", highestBidder)
 
-	resp = map[string]string{"auction_id": strconv.Itoa(allAuctions.LiveAuction.Id), "price" : fmt.Sprintf("%f", highestBidder.Price),
-	"highest_bidder_id": strconv.Itoa(highestBidder.BidderId)}
+	resp = map[string]string{"auction_id": strconv.Itoa(allAuctions.LiveAuction.Id), "price": fmt.Sprintf("%f", highestBidder.Price),
+		"bidder_id": strconv.Itoa(highestBidder.BidderId)}
 	commonUtils.SendJSONResponse(w, resp)
-}
-
-func sendAuctionNotification(biddersObj bidderModels.AppState, bidEntriesChannel chan bidderModels.BidResponse) {
-	// Create an http client for making requests
-	client := http.Client{Timeout: 200 * time.Millisecond}
-	for _, v := range biddersObj.BidderList {
-		url := "http://127.0.0.1:" + strconv.Itoa(v.Port) + "/register-notification"
-		go sendRequests(client, url, bidEntriesChannel)
-	}
-}
-
-func sendRequests(client http.Client, url string, channel chan bidderModels.BidResponse) bidderModels.BidResponse {
-	var bidResp bidderModels.BidResponse
-	resp, err := client.Get(url)
-	if err != nil {
-		fmt.Println("Response error: ", err)
-		return bidResp
-	}
-	defer resp.Body.Close()
-	json.NewDecoder(resp.Body).Decode(&bidResp)
-	select {
-	case channel <- bidResp:
-		fmt.Println("sent message", bidResp)
-	default:
-		fmt.Println("no message sent")
-	}
-	return bidResp
 }

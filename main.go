@@ -15,14 +15,13 @@ func main() {
 	if err := http.ListenAndServe("localhost:5000", nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
-	//http.ListenAndServe(":5000", nil)
 }
 
 func setRoutes() {
 	http.HandleFunc("/", handleRoot)
 	// Auctioneer Routes
-	http.HandleFunc("/bid-round/start", auctioneerHandlers.BidRoundHandler) // Makes an  auction live.
-	http.HandleFunc("/list-auctions", auctioneerHandlers.ListEndpointHandler) // Lists all registered auctions.
+	http.HandleFunc("/bid-round/start", auctioneerHandlers.BidRoundHandler)         // Makes an  auction live.
+	http.HandleFunc("/list-auctions", auctioneerHandlers.ListEndpointHandler)       // Lists all registered auctions.
 	http.HandleFunc("/register-auction", auctioneerHandlers.RegisterAuctionHandler) // Register a new auction
 	// Bidder Routes
 	http.HandleFunc("/list-bidders", bidderHandlers.ListBiddersHandler)

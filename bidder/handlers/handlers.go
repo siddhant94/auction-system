@@ -1,19 +1,20 @@
 package handlers
 
 import (
-	bidderModels "auction-system/bidder/bidderModels"
+	"auction-system/bidder/bidderModels"
 	bidderUtils "auction-system/bidder/utils"
 	commonUtils "auction-system/commonUtils"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-	//"sync"
 	"time"
 )
 
-var allBidders bidderModels.AppState
-var allottedIds map[int]struct{}
+var (
+	allBidders  bidderModels.AppState
+	allottedIds map[int]struct{}
+)
 
 func init() {
 	allBidders = bidderModels.AppState{}
@@ -22,12 +23,16 @@ func init() {
 
 // TODO: This is currently create and register. Split registering to different function handler
 func CreateAndRegisterBidderHandler(w http.ResponseWriter, r *http.Request) {
+	check := commonUtils.VerifyHTTPMethod(w, r, "POST")
+	if check == false {
+		w = commonUtils.SendMethodNotAllowed(w)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	var bidder bidderModels.BidderStruct
 	err := decoder.Decode(&bidder)
 	if err != nil {
 		fmt.Println(err)
-		// TODO: Add http status code
 		commonUtils.SendJSONResponse(w, map[string]string{"success": "false", "error": "true", "message": "Unable to decode Request body."})
 		return
 	}
@@ -38,20 +43,27 @@ func CreateAndRegisterBidderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check against allotted id's if any repeat ID is given.
-	// TODO: handle infinite loop condition
-	for {
+	// Random Id creation would run 100 times, and if still no unique Id, then drop the creation
+	i := 0
+	for i <= 100 {
 		newId := commonUtils.GetRandomInt()
 		if _, found := allottedIds[newId]; !found {
 			bidder.Id = newId
+			allottedIds[newId] = struct{}{}
 			break;
+		} else {
+			commonUtils.SendJSONResponse(w, map[string]string{"success": "false", "error": "true", "message": "Could not generate unique Bidder"})
+			return
 		}
 
 	}
-	err = bidderUtils.StartBidderServer(bidder, BidderNotificationHandler)
-	if err != nil {
-		commonUtils.SendJSONResponse(w, map[string]string{"success": "false", "error": "true", "message": err.Error()})
+	if !bidderUtils.IsTCPPortAvailable(bidder.Port) {
+		commonUtils.SendJSONResponse(w, map[string]string{"success": "false", "error": "true", "message": "Port in use."})
 		return
 	}
+
+	go bidderUtils.StartBidderServer(bidder, BidderNotificationHandler)
+
 	allBidders.Lock()
 	defer allBidders.Unlock()
 
@@ -61,10 +73,16 @@ func CreateAndRegisterBidderHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListBiddersHandler(w http.ResponseWriter, r *http.Request) {
+	check := commonUtils.VerifyHTTPMethod(w, r, "GET")
+	if check == false {
+		w = commonUtils.SendMethodNotAllowed(w)
+		return
+	}
 	biddersList := GetBiddersList()
 	commonUtils.SendJSONResponse(w, biddersList)
 }
 
+//BidderNotificationHandler : Takes in a delay and Id, which it passes on to func that returns RequestHandlerFunction
 func BidderNotificationHandler(t time.Duration, id int) bidderModels.RequestHandlerFunction {
 	return func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(t * time.Millisecond)
@@ -78,7 +96,7 @@ func BidderNotificationHandler(t time.Duration, id int) bidderModels.RequestHand
 	}
 }
 
-
+// GetBiddersList : Returns the app state for bidders module
 func GetBiddersList() bidderModels.AppState {
 	return allBidders
 }
