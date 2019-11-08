@@ -1,7 +1,8 @@
 package main
 
 import (
-	handlers "auction-system/auctioneer/handlers"
+	auctioneerHandlers "auction-system/auctioneer/handlers"
+	bidderHandlers "auction-system/bidder/handlers"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,14 +19,16 @@ func main() {
 }
 
 func setRoutes() {
-	http.HandleFunc("/", HelloServer)
-	http.HandleFunc("/bid", handlers.BidEndpointHandler) // Accepts ad-request
-	http.HandleFunc("/list-auctions", handlers.ListEndpointHandler) // Accepts ad-request
-	http.HandleFunc("/register-bidder", handlers.BidEndpointHandler) // Accepts ad-request
-
-	http.HandleFunc("/register-auction", handlers.RegisterAuctionHandler) // Accepts ad-request
+	http.HandleFunc("/", handleRoot)
+	// Auctioneer Routes
+	http.HandleFunc("/bid-round/start", auctioneerHandlers.BidRoundHandler) // Makes an  auction live.
+	http.HandleFunc("/list-auctions", auctioneerHandlers.ListEndpointHandler) // Lists all registered auctions.
+	http.HandleFunc("/register-auction", auctioneerHandlers.RegisterAuctionHandler) // Register a new auction
+	// Bidder Routes
+	http.HandleFunc("/list-bidders", bidderHandlers.ListBiddersHandler)
+	http.HandleFunc("/create-bidder", bidderHandlers.CreateAndRegisterBidderHandler) // Creates a bidder and registers it to Global bidders list.
 }
 
-func HelloServer(w http.ResponseWriter, r *http.Request) {
+func handleRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Welcome to a diligent server!!")
 }
