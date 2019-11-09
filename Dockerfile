@@ -3,19 +3,20 @@ FROM golang:1.12.0-alpine3.9
 
 
 # We create an /app directory within our image that will hold our application source files
-RUN mkdir /auction-system
+RUN mkdir /go/src/auction-system
 
 # Add everything in root dir to the below folder
-ADD . /auction-system
+ADD . /go/src/auction-system
 
 # cd into Work directory
-WORKDIR /auction-system
+WORKDIR /go/src/auction-system
 
 RUN go get
+#github.com/siddhant94/auction-system
 
 RUN go build -o main .
 
-
+RUN ls
 
 # Command to run the executable
-CMD ["./auction-system"]
+CMD ["./main"]
