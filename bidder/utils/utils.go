@@ -13,8 +13,6 @@ import (
 const (
 	minTCPPort         = 0
 	maxTCPPort         = 65535
-	maxReservedTCPPort = 1024
-	maxRandTCPPort     = maxTCPPort - (maxReservedTCPPort + 1)
 )
 
 type bidderStateHandler func(time.Duration, int) bidderModels.RequestHandlerFunction

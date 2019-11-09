@@ -20,7 +20,7 @@ func init() {
 	maxFloat = 1000.00
 }
 
-func GetRandomInt() int {
+func GetRandomInt(min int, max int) int {
 	randomNum := rand.Intn(max-min+1) + min
 	return randomNum
 }

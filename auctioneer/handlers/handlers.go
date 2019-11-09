@@ -42,7 +42,7 @@ func RegisterAuctionHandler(w http.ResponseWriter, r *http.Request) {
 	// Random Id creation would run 100 times, and if still no unique Id, then drop the creation
 	i := 0
 	for i <= 100 {
-		newId := commonUtils.GetRandomInt()
+		newId := commonUtils.GetRandomInt(1, 1000)
 		if _, found := allottedIds[newId]; !found {
 			auction.Id = newId
 			break;

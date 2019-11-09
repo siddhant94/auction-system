@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+const urlPrepend, auctionNotifURL = "http://127.0.0.1:", "/auction-notification"
+
 func SendAuctionNotification(biddersObj bidderModels.AppState, bidEntriesChannel chan bidderModels.BidResponse) {
 	// Create an http client for making requests.
 	client := http.Client{Timeout: 200 * time.Millisecond}
 	for _, v := range biddersObj.BidderList {
-		url := "http://127.0.0.1:" + strconv.Itoa(v.Port) + "/auction-notification"
+		url := urlPrepend + strconv.Itoa(v.Port) + auctionNotifURL
 		go sendRequests(client, url, bidEntriesChannel)
 	}
 }
