@@ -4,6 +4,11 @@
 *.dll
 *.so
 *.dylib
+.idea/
+auction-system
+hr_conf.json
+tmp/
+addAuctionReq.json
 
 # Test binary, built with `go test -c`
 *.test
@@ -13,3 +18,10 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+
+.idea/
+	addAuctionReq.json
+	auction-system
+	hr_conf.json
+	tmp/
